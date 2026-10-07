@@ -1,3 +1,20 @@
+# Generated
 node_modules/
 _site/
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS and editors
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Local-only settings
+.env
+.claude/settings.local.json
