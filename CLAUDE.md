@@ -341,6 +341,13 @@ On `main` it then assembles `_site/` (static files only: `index.html`,
 `actions/deploy-pages`. **New top-level files must be added to the
 `cp` line**, or they won't be published.
 
+The actions are pinned to Node 24 majors (`checkout@v7`, `setup-node@v7`,
+`configure-pages@v6`, `upload-pages-artifact@v5`, `deploy-pages@v5`).
+Older majors run on Node 20, and GitHub puts a deprecation warning on
+every run. `upload-pages-artifact` v4+ leaves out dotfiles by default,
+so a dotfile in `_site` needs `include-hidden-files: true`. A
+`.nojekyll` file isn't needed, because Actions deploys never run Jekyll.
+
 **One-time repo setup:** go to Settings → Pages → Build and deployment →
 Source and choose **GitHub Actions**. The workflow's `GITHUB_TOKEN`
 can't turn Pages on by itself.
