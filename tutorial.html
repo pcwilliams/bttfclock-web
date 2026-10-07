@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building Time Circuits Web</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #0b0b0a;
+  --panel: #17171a;
+  --panel-2: #1f1f22;
+  --text: #e9e9e4;
+  --muted: #a0a096;
+  --accent: #ffb300;
+  --border: #2a2a2e;
+  --prompt-bg: #171f17;
+  --prompt-border: #34ff5a;
+  --ref-bg: #1f1712;
+  --ref-border: #ffb300;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.container { max-width: 820px; margin: 0 auto; padding: 40px 16px 80px; }
+.hero { text-align: center; margin-bottom: 24px; }
+.hero h1 { font-size: clamp(24px, 6vw, 36px); letter-spacing: 2px; margin: 12px 0 4px; font-weight: 900; text-transform: uppercase; }
+.hero p { color: var(--muted); margin: 0; font-size: 14px; }
+.browser-frame { margin: 30px auto 40px; max-width: 640px; background: #000; border-radius: 14px; padding: 8px;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.55), 0 0 0 2px #2a2a2a; }
+.browser-frame img { width: 100%; display: block; border-radius: 8px; }
+h2 { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-top: 48px; font-size: 22px; letter-spacing: 0.5px; }
+h3 { color: var(--accent); margin-top: 30px; font-size: 16px; }
+.prompt { background: var(--prompt-bg); border-left: 3px solid var(--prompt-border); padding: 14px 18px; margin: 14px 0 18px;
+  border-radius: 0 8px 8px 0; font-style: italic; }
+.prompt .who { font-style: normal; color: var(--prompt-border); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+.reference { background: var(--ref-bg); border-left: 3px solid var(--ref-border); padding: 14px 18px; margin: 14px 0 18px; border-radius: 0 8px 8px 0; }
+.reference .who { color: var(--ref-border); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+p { color: var(--muted); line-height: 1.6; }
+ul { color: var(--muted); line-height: 1.7; }
+code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text); }
+pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text); }
+footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 60px; }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="hero">
+    <h1>Building Time Circuits · Web</h1>
+    <p>How the SwiftUI clock became a three.js page in one session</p>
+  </div>
+
+  <div class="browser-frame"><img src="docs/bttfclock-web.png" alt="The finished web clock"></div>
+
+  <h2>The pitch</h2>
+  <div class="prompt">
+    <span class="who">Prompt</span>
+    Please create a web version of bttfclock, using three.js. You can create a repo called bttfclock-web. Please ask any clarifying questions — thanks.
+  </div>
+  <p>The starting point was the iOS and macOS app: SwiftUI shapes for the segments, a 40-city catalog, three colour-coded rows, and a colon phase-locked to the wall clock. Its <code>CLAUDE.md</code> already described every constant, so the port could be faithful by construction rather than by eye.</p>
+
+  <h2>Four questions first</h2>
+  <p>Some decisions would change the whole shape of the project, so they came first:</p>
+  <ul>
+    <li><strong>How 3D?</strong> Subtle 3D: identical to the app head-on, with real depth (raised panels, recessed windows, bloom) and a gentle tilt towards the mouse or gyro. Not a free-orbit model.</li>
+    <li><strong>Tooling?</strong> No build step: ES modules, with three.js through an import map.</li>
+    <li><strong>Scope?</strong> City settings panel, URL parameters mirroring the launch args, ported unit tests, and the full docs set.</li>
+    <li><strong>Hosting?</strong> A public repo deployed to GitHub Pages.</li>
+  </ul>
+  <div class="reference">
+    <span class="who">Note</span>
+    Creating the repository from the session was refused (the GitHub integration couldn't create repos), so it was created by hand and then attached. A good reminder to check permissions before planning a push.
+  </div>
+
+  <h2>Step 1: port the pure layer, with tests</h2>
+  <p>Everything that isn't pixels moved to <code>js/models</code> and <code>js/services</code>, with no DOM and no three.js, so Node's built-in test runner can exercise it directly:</p>
+  <ul>
+    <li><code>segmentMaps.js</code>: the 7- and 14-segment bitmask tables, including the A, S and V fixes the app made during its own development.</li>
+    <li><code>segmentGeometry.js</code>: a line-for-line port of <code>SegmentShapes.swift</code>. It produces six-point beveled hexagons, with italic skew applied per point using the full character height.</li>
+    <li><code>layout.js</code>: the SwiftUI HStack arithmetic, reproduced in "natural points". One test pins the row width to the Swift value, 358.52pt.</li>
+    <li><code>timeReadout.js</code>: <code>Intl.DateTimeFormat</code> with <code>hourCycle: 'h23'</code>, cached per zone. Unknown zones fall back to UTC, like the app's <code>?? .gmt</code>.</li>
+    <li><code>cityStore.js</code>: the same storage key, cap and semantics, with Storage injected so tests use an in-memory map.</li>
+  </ul>
+  <p>All 35 Swift tests were ported, plus 18 more that cover DST, URL parsing, geometry and corrupt storage: 53 in total, run with <code>node --test</code> and no dependencies.</p>
+
+  <h2>Step 2: the first render, and a washed-out glow</h2>
+  <p>The scene uses the layout numbers directly as world units. The enclosure and panels are extruded rounded rectangles with procedural brushed-metal canvas textures. Each field gets a gel plane, an extruded bezel, a glass sheet and a canvas-drawn DYMO caption. All ghost segments in a row are merged into one <code>ShapeGeometry</code>.</p>
+  <div class="reference">
+    <span class="who">Observation</span>
+    I'm seeing the whole clock drowned in coloured haze: the panels read light grey, the black windows look grey, and there's a red, green and amber fog around the chassis. Turning bloom off shows a crisp render that's almost identical to the app.
+  </div>
+  <p>Two causes, two fixes:</p>
+  <ul>
+    <li><strong>The bloom spread.</strong> <code>UnrealBloomPass</code> blends five mips with weights <code>[1, .8, .6, .4, .2]</code>, and even with <code>radius: 0</code> the 1/16 and 1/32 mips smear light across the screen. Overriding them to <code>[0.7, 0.4, 0.12, 0.02, 0]</code> keeps the glow tight, like the app's stacked 2/5/11pt shadows.</li>
+    <li><strong>Unequal LEDs.</strong> Red is dim in luminance terms, so a single multiplier made green and amber bloom far more than red. Each LED colour is now normalised to the same target luminance, so all three rows glow equally.</li>
+  </ul>
+
+  <h2>Step 3: one colour, two looks</h2>
+  <p>The app draws pale <code>litCore</code> segments with saturated <code>bloom</code>-coloured shadows. In a single-pass bloom, a pale core would give a pale glow. The trick is to use the <em>saturated</em> <code>lit</code> colour at HDR intensity:</p>
+  <pre>// Neutral tone mapping desaturates the hot core towards white (litCore),
+// while the bloom keeps the full row colour (the bloom shadows).
+lit: new THREE.MeshBasicMaterial({ color: hdr(color.lit, LED_LUMINANCE) })</pre>
+  <p>Because the render target is half-float, colours above 1.0 survive to the bloom pass. Everything that isn't an LED stays under the 0.8 threshold, so bloom is selective without layers or a second render.</p>
+
+  <h2>Step 4: draw only when something changes</h2>
+  <p>A clock that changes twice a second doesn't need a 60&nbsp;Hz loop. The final timing model:</p>
+  <ul>
+    <li>One <code>setTimeout</code> lands on every wall-clock half-second, flips the colon, and recomputes readouts only when the minute changes.</li>
+    <li><code>requestRender()</code> coalesces into a single rAF, which re-queues only while the tilt is still easing.</li>
+    <li>When a character changes, its mesh swaps to a cached <code>(kind, mask)</code> glyph geometry, with no allocation per tick.</li>
+  </ul>
+  <p>The result is two frames per second at rest, which matters on a phone left on a desk as a clock.</p>
+
+  <h2>Step 5: the CITIES panel and the tilt</h2>
+  <p>Settings is a native <code>&lt;dialog&gt;</code>, which gives focus trapping, Esc and the backdrop for free. Up and down buttons replace SwiftUI's drag handles so reordering works from the keyboard and with screen readers, and each row shows its LED colour and the city's local time. Search covers names and IANA zones, and adding is disabled at three cities.</p>
+  <p>The tilt follows the pointer on desktop. On phones it uses <code>deviceorientation</code> against a slowly drifting baseline, so any holding angle reads as level. iOS asks for permission on the first tap. It's off for <code>prefers-reduced-motion</code> and <code>?notilt</code>.</p>
+
+  <h2>Step 6: testing visuals headless</h2>
+  <p>As in the app's <code>-frozendate</code> workflow, the URL parameters make screenshots reproducible:</p>
+  <pre>?frozendate=1985-10-26T01:21:00-07:00
+?frozendate=2015-10-21T16:29:00-07:00&amp;cities=hill_valley,london,tokyo</pre>
+  <p>Playwright drove Chromium with SwiftShader (<code>--use-angle=swiftshader</code>). It served three.js locally by intercepting the CDN URL, and it checked add, remove, reorder, persistence across reload, the empty state and reset, with no console errors. One gotcha appeared along the way: <code>URLSearchParams</code> turns the <code>+</code> in <code>+01:00</code> into a space, so the parser now restores it, and a test covers that.</p>
+
+  <h2>What's next</h2>
+  <ul>
+    <li>An optional "Destination time" mode, where the red row can be set to any date.</li>
+    <li>A PWA manifest so it can be installed as a full-screen desk clock.</li>
+    <li>A Wake Lock toggle to keep a phone's screen on.</li>
+  </ul>
+
+  <footer>Time Circuits Web · <a href="architecture.html">Architecture →</a></footer>
+</div>
+</body>
+</html>

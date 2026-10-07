@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Time Circuits</title>
+  <meta name="description" content="A Back to the Future Time Circuits world clock: three cities on red, green and amber LED rows, rendered in 3D with three.js.">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:title" content="Time Circuits">
+  <meta property="og:description" content="A Back to the Future Time Circuits world clock, rendered in 3D with three.js.">
+  <meta property="og:image" content="docs/bttfclock-web.png">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend+Exa:wght@500;600;800&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <canvas id="clock" aria-label="Time Circuits clock showing the time in three cities" role="img"></canvas>
+
+  <p class="no-webgl-note">
+    This clock needs WebGL 2, which isn't available in this browser.
+  </p>
+
+  <button id="open-settings" class="cities-btn" type="button" aria-haspopup="dialog" aria-controls="settings" title="Cities (,)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9c-.6.3-1.2.6-1.7 1l-2.5-1-2 3.5L6.5 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.9c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" transform="translate(-1 0)"/></svg>
+    <span>CITIES</span>
+  </button>
+
+  <dialog id="settings" aria-labelledby="settings-title">
+    <div class="panel">
+      <header>
+        <h2 id="settings-title" tabindex="-1" autofocus>Time Circuits</h2>
+        <button class="done-btn" type="button" data-close>Done</button>
+      </header>
+
+      <section aria-labelledby="active-title">
+        <div class="section-head">
+          <h3 id="active-title">Active rows</h3>
+          <span data-count></span>
+        </div>
+        <ol class="selected" data-selected></ol>
+        <p class="hint">Top row is red (destination), middle is green (present), bottom is amber (last departed). Moving a city changes its colour.</p>
+      </section>
+
+      <section aria-labelledby="add-title">
+        <div class="section-head">
+          <h3 id="add-title">Add a city</h3>
+        </div>
+        <input class="search" type="search" placeholder="Search cities or time zones" autocomplete="off" spellcheck="false" aria-label="Search cities" data-search>
+        <p class="hint full-note" data-full hidden>All three rows are in use. Remove a city to add another.</p>
+        <ul class="catalog" data-catalog></ul>
+      </section>
+
+      <footer>
+        <button class="reset-btn" type="button" data-reset>Reset to New York · London · Hong Kong</button>
+      </footer>
+    </div>
+  </dialog>
+</body>
+</html>

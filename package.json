@@ -1,0 +1,14 @@
+{
+  "name": "bttfclock-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Back to the Future Time Circuits world clock for the web, built with three.js. No build step.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "serve": "python3 -m http.server 8000"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

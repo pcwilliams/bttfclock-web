@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time Circuits Web Architecture</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #0b0b0a;
+  --panel: #17171a;
+  --panel-2: #1f1f22;
+  --text: #e9e9e4;
+  --muted: #a0a096;
+  --accent-red: #ff3028;
+  --accent-green: #34ff5a;
+  --accent-amber: #ffb300;
+  --border: #2a2a2e;
+  --caption-red: #9a1a17;
+  --caption-text: #c7c7bf;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.55; }
+.container { max-width: 960px; margin: 0 auto; padding: 40px 16px 80px; }
+.hero { text-align: center; margin-bottom: 24px; }
+.hero h1 { font-size: clamp(26px, 6vw, 36px); letter-spacing: 2px; margin: 12px 0 4px; font-weight: 900; text-transform: uppercase; }
+.hero p { color: var(--muted); margin: 0; font-size: 14px; }
+.badges { display: flex; justify-content: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.badge { display: inline-block; padding: 4px 10px; border: 1px solid var(--border); border-radius: 12px; font-size: 11px; color: var(--muted); }
+.shots { display: flex; gap: 28px; justify-content: center; align-items: center; flex-wrap: wrap; margin: 30px 0 40px; }
+.browser-frame { flex: 1 1 520px; max-width: 620px; background: #000; border-radius: 14px; padding: 28px 8px 8px; position: relative;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.55), 0 0 0 2px #2a2a2a; }
+.browser-frame::before { content: ""; position: absolute; top: 10px; left: 14px; width: 42px; height: 9px;
+  background: radial-gradient(circle at 4px 4.5px, #ff5f57 4px, transparent 4.5px), radial-gradient(circle at 21px 4.5px, #febc2e 4px, transparent 4.5px), radial-gradient(circle at 38px 4.5px, #28c840 4px, transparent 4.5px); }
+.browser-frame img { width: 100%; display: block; border-radius: 6px; }
+.phone-frame { width: 200px; padding: 8px; background: #000; border-radius: 36px; box-shadow: 0 30px 60px rgba(0,0,0,0.55), 0 0 0 2px #2a2a2a; }
+.phone-frame img { width: 100%; border-radius: 28px; display: block; }
+h2 { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-top: 56px; font-size: 24px; letter-spacing: 0.5px; }
+h3 { color: var(--accent-amber); margin-top: 32px; font-size: 18px; }
+p, li { color: var(--muted); }
+.diagram { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 20px 0; overflow-x: auto; }
+.diagram .caption { font-size: 12px; color: var(--muted); margin-top: 10px; font-style: italic; text-align: center; }
+code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text); }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; display: block; overflow-x: auto; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--text); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+td { color: var(--muted); }
+.row-legend { display: flex; gap: 18px; margin: 10px 0 30px; flex-wrap: wrap; justify-content: center; }
+.row-legend .sw { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.row-legend .dot { width: 14px; height: 14px; border-radius: 50%; }
+.dot.red { background: var(--accent-red); box-shadow: 0 0 12px var(--accent-red); }
+.dot.green { background: var(--accent-green); box-shadow: 0 0 12px var(--accent-green); }
+.dot.amber { background: var(--accent-amber); box-shadow: 0 0 12px var(--accent-amber); }
+footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 60px; }
+a { color: var(--accent-amber); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="hero">
+    <h1>Time Circuits · Web</h1>
+    <p>Architecture of the three.js port of bttfclock</p>
+    <div class="badges">
+      <span class="badge">three.js r186</span>
+      <span class="badge">ES modules · no build</span>
+      <span class="badge">WebGL 2 · HDR bloom</span>
+      <span class="badge">53 node:test tests</span>
+    </div>
+  </div>
+
+  <div class="shots">
+    <div class="browser-frame"><img src="docs/bttfclock-web.png" alt="Desktop browser showing the three-row Time Circuits clock"></div>
+    <div class="phone-frame"><img src="docs/bttfclock-web-phone.png" alt="Phone showing the clock with the CITIES button below"></div>
+  </div>
+
+  <div class="row-legend">
+    <span class="sw"><span class="dot red"></span>Slot 0 · Destination · New York</span>
+    <span class="sw"><span class="dot green"></span>Slot 1 · Present · London</span>
+    <span class="sw"><span class="dot amber"></span>Slot 2 · Last departed · Hong Kong</span>
+  </div>
+
+  <h2>Module map</h2>
+  <p>The pure layers (<code>models</code> and <code>services</code>) have no DOM or three.js dependency and are tested directly in Node. The scene is a thin consumer of their output.</p>
+  <div class="diagram">
+<pre class="mermaid">
+graph TD
+  HTML["index.html<br/>import map · fonts · canvas · dialog"] --> MAIN["main.js<br/>bootstrap + timing"]
+  MAIN --> LA["services/launchArgs.js<br/>?frozendate ?cities ?settings ?notilt"]
+  MAIN --> STORE["services/cityStore.js<br/>3-city cap · localStorage"]
+  MAIN --> CLOCK["services/clock.js<br/>ClockModel · isColonLit"]
+  MAIN --> PANEL["ui/settingsPanel.js<br/>&lt;dialog&gt;"]
+  MAIN --> TILT["ui/tilt.js<br/>pointer · deviceorientation"]
+  MAIN -->|dynamic import| SCENE["scene/timeCircuitsScene.js"]
+  STORE --> CAT["models/cityCatalog.js<br/>40 cities"]
+  CLOCK --> TR["models/timeReadout.js<br/>Intl.DateTimeFormat"]
+  SCENE --> LAYOUT["models/layout.js<br/>natural-point rects"]
+  SCENE --> GEO["models/segmentGeometry.js<br/>hexagon polygons"]
+  SCENE --> MAPS["models/segmentMaps.js<br/>bitmasks"]
+  SCENE --> RC["models/rowColor.js · palette.js"]
+  SCENE --> TEX["scene/textures.js<br/>canvas textures"]
+  SCENE --> THREE["three.js + addons<br/>(CDN)"]
+  TILT --> SCENE
+  PANEL --> STORE
+</pre>
+    <div class="caption">Arrows mean "imports" or "drives". Everything under models/ is pure.</div>
+  </div>
+
+  <h2>Timing and data flow</h2>
+  <p>No 60&nbsp;Hz loop runs. A single timeout lands on every wall-clock half-second. It flips the colon and recomputes readouts only when the minute changes. Rendering is coalesced into one requestAnimationFrame per change.</p>
+  <div class="diagram">
+<pre class="mermaid">
+graph TD
+  T["setTimeout(500 - now % 500)<br/>half-second boundary"] --> C["isColonLit(now)"]
+  C --> SC["scene.setColonLit()"]
+  T --> MK{"minute key changed?"}
+  MK -->|no| IDLE["nothing"]
+  MK -->|yes| RO["ClockModel.readouts(cities)"]
+  RO --> SR["scene.setReadouts()"]
+  SR --> GC["per char: mask changed?<br/>swap geometry from glyph cache"]
+  VIS["visibilitychange → visible"] --> RO
+  ST["CityStore.subscribe()"] --> SET["scene.setCities() → rebuild model"]
+  SET --> RO
+  SC --> RR["requestRender()"]
+  GC --> RR
+  SET --> RR
+  TI["tilt target / resize"] --> RR
+  RR --> RAF["one rAF"]
+  RAF --> EASE["ease tilt"]
+  EASE --> COMP["composer.render()"]
+  EASE -->|still easing| RR
+</pre>
+    <div class="caption">A steady clock renders two frames per second. Moving the mouse renders until the tilt settles.</div>
+  </div>
+
+  <h2>Render pipeline: selective bloom from one HDR pass</h2>
+  <div class="diagram">
+<pre class="mermaid">
+graph TD
+  SCN["Scene<br/>LED materials: lit colour normalised to luminance 2.0<br/>chrome, panels, text: below 0.8"] --> RP["RenderPass<br/>HalfFloat target · 4× MSAA"]
+  RP --> UB["UnrealBloomPass<br/>threshold 0.8 · strength 0.7<br/>mip weights 0.7 / 0.4 / 0.12 / 0.02 / 0"]
+  UB --> OP["OutputPass<br/>NeutralToneMapping + sRGB"]
+  OP --> CANVAS["canvas"]
+</pre>
+    <div class="caption">Only values above the threshold bloom, and only the LEDs are that bright. The tone mapper whitens the hot core (the app's litCore) while the bloom keeps the row colour (the app's bloom shadows).</div>
+  </div>
+
+  <h2>Scene graph</h2>
+  <div class="diagram">
+<pre class="mermaid">
+graph TD
+  S["THREE.Scene<br/>RoomEnvironment (PMREM) + key light"] --> RIG["rig (Group)<br/>rotation = tilt"]
+  RIG --> ENC["Enclosure slab<br/>extruded rounded rect r=14"]
+  RIG --> RIV["4 × rivet domes"]
+  RIG --> ROW["× rows (0–3)"]
+  ROW --> PAN["Row panel<br/>brushed-metal slab r=5"]
+  ROW --> FLD["× 5 fields"]
+  FLD --> GEL["display gel plane"]
+  FLD --> BEZ["bezel (extruded frame with hole)"]
+  FLD --> GLS["glass plane (additive reflection)"]
+  FLD --> CAP["caption plate (canvas)"]
+  FLD --> LIT["lit glyph mesh per char"]
+  ROW --> GHO["ghost segments<br/>one merged ShapeGeometry"]
+  ROW --> AMP["AM / PM plates + lamp domes"]
+  ROW --> COL["2 colon domes"]
+  ROW --> CITY["city plate (canvas)"]
+</pre>
+    <div class="caption">About 30 meshes per row. Lit segments share cached geometries keyed by (7 or 14, mask).</div>
+  </div>
+
+  <h3>Depth stack (z, in points)</h3>
+  <table>
+    <tr><th>z</th><th>Element</th><th>Material</th></tr>
+    <tr><td>0</td><td>Enclosure front face</td><td>Standard, dark brushed-metal map</td></tr>
+    <tr><td>1.6</td><td>Row panel front face</td><td>Standard, light brushed-metal map</td></tr>
+    <tr><td>+0.05</td><td>Display gel</td><td>Basic, vertical tint gradient</td></tr>
+    <tr><td>+0.10</td><td>Ghost segments, lamp domes</td><td>Basic, <code>ghost</code></td></tr>
+    <tr><td>+0.15</td><td>Lit segments</td><td>Basic, HDR <code>lit</code></td></tr>
+    <tr><td>+0.35</td><td>Caption, AM/PM and city plates</td><td>Basic + canvas texture</td></tr>
+    <tr><td>+1.1</td><td>Bezel top and glass</td><td>Black standard / additive reflection</td></tr>
+  </table>
+
+  <h2>Layout in natural points</h2>
+  <p><code>models/layout.js</code> reproduces the SwiftUI HStack arithmetic, and the scene uses those numbers directly as world units. One row is 358.52 × 71 points (row aspect ≈ 5.05). The camera then fits the whole enclosure to the viewport, which is the 3D equivalent of the app's per-row <code>.scaleEffect</code>.</p>
+  <table>
+    <tr><th>Constant</th><th>Value</th><th>Meaning</th></tr>
+    <tr><td>digitHeight</td><td>28</td><td>LED character height</td></tr>
+    <tr><td>sevenSegAspect / fourteenSegAspect</td><td>0.58 / 0.68</td><td>Character box width ÷ height</td></tr>
+    <tr><td>thicknessRatio · italicSkew</td><td>0.18 · 0.10</td><td>Bar thickness · right lean</td></tr>
+    <tr><td>charGap · fieldGap · dateTimeGap</td><td>5 · 4 · 9</td><td>Spacing</td></tr>
+    <tr><td>amPmWidth · colonWidth</td><td>18 · 12</td><td>Indicator columns</td></tr>
+    <tr><td>caption · window padding</td><td>11 tall · 4h/3v</td><td>DYMO plate · LED inset</td></tr>
+  </table>
+
+  <h2>Settings flow</h2>
+  <div class="diagram">
+<pre class="mermaid">
+graph TD
+  BTN["CITIES button / , key / ?settings"] --> OPEN["SettingsPanel.open()<br/>dialog.showModal()"]
+  OPEN --> UI["▲ ▼ ✕ per row · search · add · reset"]
+  UI --> MUT["CityStore.move / removeAt / add / resetToDefaults"]
+  MUT --> PERSIST["localStorage<br/>bttfclock.selectedCityIds.v1"]
+  MUT --> NOTIFY["subscribers"]
+  NOTIFY --> REB["scene.setCities() + readouts"]
+  NOTIFY --> RER["panel.render()"]
+</pre>
+  </div>
+
+  <footer>Time Circuits Web · a fan-made clock · <a href="tutorial.html">How it was built →</a></footer>
+</div>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#17171a', primaryColor: '#1f1f22', primaryTextColor: '#e9e9e4',
+      primaryBorderColor: '#ffb300', lineColor: '#a0a096', fontSize: '14px',
+    },
+    flowchart: { htmlLabels: true, curve: 'basis' },
+  });
+</script>
+</body>
+</html>
