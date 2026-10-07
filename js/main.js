@@ -12,7 +12,6 @@ import { ClockModel, isColonLit } from './services/clock.js';
 import { parseLaunchArgs } from './services/launchArgs.js';
 import { cityWithId } from './models/cityCatalog.js';
 import { SettingsPanel } from './ui/settingsPanel.js';
-import { attachTilt } from './ui/tilt.js';
 import { LABEL_FONT_FAMILY } from './scene/textures.js';
 
 async function fontsReady() {
@@ -121,7 +120,6 @@ async function main() {
     if (!document.hidden) refreshReadouts(true);
   });
 
-  attachTilt(scene, { enabled: !args.noTilt });
   document.body.classList.add('ready');
   if (args.openSettings) panel.open();
 }

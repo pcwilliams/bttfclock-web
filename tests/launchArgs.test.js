@@ -67,9 +67,8 @@ test('cities parses a trimmed, lower-cased list', () => {
 
 test('flags default to off when absent', () => {
   const none = parseLaunchArgs('');
-  assert.deepEqual(none, { frozenDate: null, cityIds: null, openSettings: false, noTilt: false });
-  const all = parseLaunchArgs('?settings&notilt&cities=paris');
+  assert.deepEqual(none, { frozenDate: null, cityIds: null, openSettings: false });
+  const all = parseLaunchArgs('?settings&cities=paris');
   assert.equal(all.openSettings, true);
-  assert.equal(all.noTilt, true);
   assert.deepEqual(all.cityIds, ['paris']);
 });

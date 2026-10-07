@@ -19,13 +19,13 @@ segment shapes, colours, city catalog and behaviour.
   with AM/PM lamps, for up to three cities. The defaults are New York,
   London and Hong Kong.
 - **Faithful LEDs:** hand-built 7- and 14-segment glyphs with italic
-  lean, dim "ghost" segments behind the gel, and a coloured glow.
+  lean, dim "ghost" segments behind the gel, and a soft coloured glow
+  that keeps the digits crisp.
 - **A ticking colon** that steps on the wall-clock second: on for the
   first half, off for the second.
-- **Subtle 3D:** raised brushed-metal panels, recessed windows behind
-  glass, and domed lamps and rivets. The panel turns gently towards your
-  mouse, or follows your phone's tilt. This is disabled automatically
-  when you've asked your system for reduced motion.
+- **Subtle 3D, straight-on:** raised brushed-metal panels, recessed
+  windows behind glass, and domed lamps and rivets, all lit like a
+  photo of the prop.
 - **CITIES panel:** pick from 40 cities, search, reorder and remove.
   The row colour follows position: red for destination, green for
   present, amber for last departed. Your choice is saved in the browser.
@@ -43,7 +43,6 @@ segment shapes, colours, city catalog and behaviour.
 | `frozendate` | `?frozendate=1985-10-26T01:21:00-07:00` | Freezes the display at a moment in time (include the UTC offset) |
 | `cities` | `?cities=hill_valley,london,tokyo` | Chooses the cities |
 | `settings` | `?settings` | Opens the CITIES panel straight away |
-| `notilt` | `?notilt` | Turns off the 3D tilt |
 
 For example:
 [`?frozendate=2015-10-21T16:29:00-07:00&cities=hill_valley,london,tokyo`](https://pcwilliams.github.io/bttfclock-web/?frozendate=2015-10-21T16:29:00-07:00&cities=hill_valley,london,tokyo)
@@ -82,8 +81,8 @@ Safari (desktop or iOS).
 
 - three.js is loaded from a CDN through an import map, so there's
   nothing to compile.
-- The LED glow is a single HDR render with a bloom pass. Only the LEDs
-  are bright enough to glow.
+- The digits are drawn at their true colour. Their glow is drawn
+  separately, blurred, and laid on top, so the numbers stay sharp.
 - The page only redraws when something changes, so a running clock draws
   two frames a second instead of sixty.
 

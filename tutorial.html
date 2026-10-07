@@ -64,7 +64,7 @@ a { color: var(--accent); }
   <h2>Four questions first</h2>
   <p>Some decisions would change the whole shape of the project, so they came first:</p>
   <ul>
-    <li><strong>How 3D?</strong> Subtle 3D: identical to the app head-on, with real depth (raised panels, recessed windows, bloom) and a gentle tilt towards the mouse or gyro. Not a free-orbit model.</li>
+    <li><strong>How 3D?</strong> Subtle 3D: identical to the app head-on, with real depth (raised panels, recessed windows, bloom) and a gentle tilt towards the mouse or gyro. Not a free-orbit model. (The tilt was later removed; see Step 7.)</li>
     <li><strong>Tooling?</strong> No build step: ES modules, with three.js through an import map.</li>
     <li><strong>Scope?</strong> City settings panel, URL parameters mirroring the launch args, ported unit tests, and the full docs set.</li>
     <li><strong>Hosting?</strong> A public repo deployed to GitHub Pages.</li>
@@ -108,20 +108,36 @@ lit: new THREE.MeshBasicMaterial({ color: hdr(color.lit, LED_LUMINANCE) })</pre>
   <p>A clock that changes twice a second doesn't need a 60&nbsp;Hz loop. The final timing model:</p>
   <ul>
     <li>One <code>setTimeout</code> lands on every wall-clock half-second, flips the colon, and recomputes readouts only when the minute changes.</li>
-    <li><code>requestRender()</code> coalesces into a single rAF, which re-queues only while the tilt is still easing.</li>
+    <li><code>requestRender()</code> coalesces into a single rAF.</li>
     <li>When a character changes, its mesh swaps to a cached <code>(kind, mask)</code> glyph geometry, with no allocation per tick.</li>
   </ul>
   <p>The result is two frames per second at rest, which matters on a phone left on a desk as a clock.</p>
 
-  <h2>Step 5: the CITIES panel and the tilt</h2>
+  <h2>Step 5: the CITIES panel</h2>
   <p>Settings is a native <code>&lt;dialog&gt;</code>, which gives focus trapping, Esc and the backdrop for free. Up and down buttons replace SwiftUI's drag handles so reordering works from the keyboard and with screen readers, and each row shows its LED colour and the city's local time. Search covers names and IANA zones, and adding is disabled at three cities.</p>
-  <p>The tilt follows the pointer on desktop. On phones it uses <code>deviceorientation</code> against a slowly drifting baseline, so any holding angle reads as level. iOS asks for permission on the first tap. It's off for <code>prefers-reduced-motion</code> and <code>?notilt</code>.</p>
+  <p>The first version also tilted the panel towards the mouse, or with the phone's gyro. Step 7 explains why that went.</p>
 
   <h2>Step 6: testing visuals headless</h2>
   <p>As in the app's <code>-frozendate</code> workflow, the URL parameters make screenshots reproducible:</p>
   <pre>?frozendate=1985-10-26T01:21:00-07:00
 ?frozendate=2015-10-21T16:29:00-07:00&amp;cities=hill_valley,london,tokyo</pre>
   <p>Playwright drove Chromium with SwiftShader (<code>--use-angle=swiftshader</code>). It served three.js locally by intercepting the CDN URL, and it checked add, remove, reorder, persistence across reload, the empty state and reset, with no console errors. One gotcha appeared along the way: <code>URLSearchParams</code> turns the <code>+</code> in <code>+01:00</code> into a space, so the parser now restores it, and a test covers that.</p>
+
+  <h2>Step 7: straight-on, and crisper LEDs</h2>
+  <p>With the site live on GitHub Pages, the first real-device feedback came in:</p>
+  <div class="prompt">
+    <span class="who">Prompt</span>
+    It's running! Thanks! A couple of minor things — I don't think we need the tilt, just straight on is perfect. And the LED numbers are too blown out — too bright, and that makes them too fuzzy. I guess it's the bloom setting?
+  </div>
+  <p>Removing the tilt was simple. <code>tilt.js</code> and <code>?notilt</code> went away, and the render loop no longer needs to ease anything, so it renders exactly once per change.</p>
+  <p>The fuzziness was only partly the bloom setting. The root cause was the Step 3 trick itself. To let a brightness threshold separate the LEDs from the grey chrome text, the segments had to be driven far above 1.0. The tone mapper then bleached their cores, and the bloom spread that extra energy into a blur.</p>
+  <p>The fix was to stop over-driving the digits and draw the glow separately:</p>
+  <ul>
+    <li>Digits are drawn at the app's exact <code>litCore</code> colour, with nothing above 1.0, so they stay crisp.</li>
+    <li>Each lit segment and lamp gets a <em>glow twin</em>: the same geometry, in the row's saturated <code>bloom</code> colour, on a layer only the glow render sees.</li>
+    <li>The twins are rendered into a small target, blurred by <code>UnrealBloomPass</code>, and added over the main image. The pass's internal <code>renderTargetsHorizontal[0]</code> holds the halo without the source, so the cores aren't doubled.</li>
+  </ul>
+  <p>This mirrors how the SwiftUI app does it: a pale fill with coloured <code>.shadow</code> layers underneath. A side-by-side crop against the app's own screenshot now matches closely.</p>
 
   <h2>What's next</h2>
   <ul>

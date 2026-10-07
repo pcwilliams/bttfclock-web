@@ -4,7 +4,6 @@
 //   ?frozendate=1985-10-26T01:21:00-07:00   pin the clock at an instant
 //   ?cities=london,tokyo,sydney             replace the selection
 //   ?settings                               open the city panel on load
-//   ?notilt                                 disable the parallax tilt
 //
 // Every parser returns null / false when the parameter is absent.
 
@@ -43,6 +42,5 @@ export function parseLaunchArgs(search) {
     frozenDate: parseFrozenDate(p.get('frozendate')),
     cityIds: parseCityIds(p.get('cities')),
     openSettings: p.has('settings'),
-    noTilt: p.has('notilt'),
   };
 }

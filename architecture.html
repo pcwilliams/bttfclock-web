@@ -64,7 +64,7 @@ a { color: var(--accent-amber); }
     <div class="badges">
       <span class="badge">three.js r186</span>
       <span class="badge">ES modules · no build</span>
-      <span class="badge">WebGL 2 · HDR bloom</span>
+      <span class="badge">WebGL 2 · glow layer</span>
       <span class="badge">53 node:test tests</span>
     </div>
   </div>
@@ -86,11 +86,10 @@ a { color: var(--accent-amber); }
 <pre class="mermaid">
 graph TD
   HTML["index.html<br/>import map · fonts · canvas · dialog"] --> MAIN["main.js<br/>bootstrap + timing"]
-  MAIN --> LA["services/launchArgs.js<br/>?frozendate ?cities ?settings ?notilt"]
+  MAIN --> LA["services/launchArgs.js<br/>?frozendate ?cities ?settings"]
   MAIN --> STORE["services/cityStore.js<br/>3-city cap · localStorage"]
   MAIN --> CLOCK["services/clock.js<br/>ClockModel · isColonLit"]
   MAIN --> PANEL["ui/settingsPanel.js<br/>&lt;dialog&gt;"]
-  MAIN --> TILT["ui/tilt.js<br/>pointer · deviceorientation"]
   MAIN -->|dynamic import| SCENE["scene/timeCircuitsScene.js"]
   STORE --> CAT["models/cityCatalog.js<br/>40 cities"]
   CLOCK --> TR["models/timeReadout.js<br/>Intl.DateTimeFormat"]
@@ -100,7 +99,6 @@ graph TD
   SCENE --> RC["models/rowColor.js · palette.js"]
   SCENE --> TEX["scene/textures.js<br/>canvas textures"]
   SCENE --> THREE["three.js + addons<br/>(CDN)"]
-  TILT --> SCENE
   PANEL --> STORE
 </pre>
     <div class="caption">Arrows mean "imports" or "drives". Everything under models/ is pure.</div>
@@ -124,32 +122,34 @@ graph TD
   SC --> RR["requestRender()"]
   GC --> RR
   SET --> RR
-  TI["tilt target / resize"] --> RR
+  TI["resize"] --> RR
   RR --> RAF["one rAF"]
-  RAF --> EASE["ease tilt"]
-  EASE --> COMP["composer.render()"]
-  EASE -->|still easing| RR
+  RAF --> COMP["renderNow()<br/>glow layer, then main image"]
 </pre>
-    <div class="caption">A steady clock renders two frames per second. Moving the mouse renders until the tilt settles.</div>
+    <div class="caption">A steady clock renders two frames per second.</div>
   </div>
 
-  <h2>Render pipeline: selective bloom from one HDR pass</h2>
+  <h2>Render pipeline: crisp digits and a separate glow layer</h2>
   <div class="diagram">
 <pre class="mermaid">
 graph TD
-  SCN["Scene<br/>LED materials: lit colour normalised to luminance 2.0<br/>chrome, panels, text: below 0.8"] --> RP["RenderPass<br/>HalfFloat target · 4× MSAA"]
-  RP --> UB["UnrealBloomPass<br/>threshold 0.8 · strength 0.7<br/>mip weights 0.7 / 0.4 / 0.12 / 0.02 / 0"]
-  UB --> OP["OutputPass<br/>NeutralToneMapping + sRGB"]
+  G1["camera.layers = GLOW_LAYER<br/>render glow twins only<br/>(row bloom colour × 0.5)"] --> G2["glowSource<br/>HalfFloat target"]
+  G2 --> UB["UnrealBloomPass (driven by hand)<br/>threshold 0 · strength 0.85<br/>mip weights 1 / .6 / .25 / .06 / 0"]
+  UB --> HALO["renderTargetsHorizontal[0]<br/>pure blurred halo"]
+  M1["camera.layers = 0<br/>RenderPass: whole model<br/>digits in true litCore colour"] --> MSAA["HalfFloat · 4× MSAA"]
+  MSAA --> MIX["GlowMixShader<br/>base + halo"]
+  HALO --> MIX
+  MIX --> OP["OutputPass<br/>NeutralToneMapping + sRGB"]
   OP --> CANVAS["canvas"]
 </pre>
-    <div class="caption">Only values above the threshold bloom, and only the LEDs are that bright. The tone mapper whitens the hot core (the app's litCore) while the bloom keeps the row colour (the app's bloom shadows).</div>
+    <div class="caption">The digits are never over-driven, so they stay sharp. The halo comes from twin meshes in the saturated row colour, like the app's <code>.shadow(color: bloom)</code> layers.</div>
   </div>
 
   <h2>Scene graph</h2>
   <div class="diagram">
 <pre class="mermaid">
 graph TD
-  S["THREE.Scene<br/>RoomEnvironment (PMREM) + key light"] --> RIG["rig (Group)<br/>rotation = tilt"]
+  S["THREE.Scene<br/>RoomEnvironment (PMREM) + key light"] --> RIG["model (Group)<br/>fixed, straight-on"]
   RIG --> ENC["Enclosure slab<br/>extruded rounded rect r=14"]
   RIG --> RIV["4 × rivet domes"]
   RIG --> ROW["× rows (0–3)"]
@@ -159,10 +159,10 @@ graph TD
   FLD --> BEZ["bezel (extruded frame with hole)"]
   FLD --> GLS["glass plane (additive reflection)"]
   FLD --> CAP["caption plate (canvas)"]
-  FLD --> LIT["lit glyph mesh per char"]
+  FLD --> LIT["lit glyph mesh per char<br/>+ glow twin (layer 1)"]
   ROW --> GHO["ghost segments<br/>one merged ShapeGeometry"]
-  ROW --> AMP["AM / PM plates + lamp domes"]
-  ROW --> COL["2 colon domes"]
+  ROW --> AMP["AM / PM plates + lamp domes<br/>+ hot spot + glow twin"]
+  ROW --> COL["2 colon domes<br/>+ hot spot + glow twin"]
   ROW --> CITY["city plate (canvas)"]
 </pre>
     <div class="caption">About 30 meshes per row. Lit segments share cached geometries keyed by (7 or 14, mask).</div>
@@ -175,7 +175,7 @@ graph TD
     <tr><td>1.6</td><td>Row panel front face</td><td>Standard, light brushed-metal map</td></tr>
     <tr><td>+0.05</td><td>Display gel</td><td>Basic, vertical tint gradient</td></tr>
     <tr><td>+0.10</td><td>Ghost segments, lamp domes</td><td>Basic, <code>ghost</code></td></tr>
-    <tr><td>+0.15</td><td>Lit segments</td><td>Basic, HDR <code>lit</code></td></tr>
+    <tr><td>+0.15</td><td>Lit segments (and glow twins, layer 1)</td><td>Basic, <code>litCore</code> (twins: <code>bloom</code>)</td></tr>
     <tr><td>+0.35</td><td>Caption, AM/PM and city plates</td><td>Basic + canvas texture</td></tr>
     <tr><td>+1.1</td><td>Bezel top and glass</td><td>Black standard / additive reflection</td></tr>
   </table>

@@ -12,15 +12,27 @@
 //   window bezels and a reflective "glass" sheet over each window
 //   caption plates, city plate, AM/PM lamps, colon dots, rivets
 //
-// Rendering is on demand: nothing is drawn unless a digit, the colon,
-// the tilt, or the viewport changes. A steady clock costs two frames a
-// second, not sixty.
+// The view is straight-on and static: the depth only shows as bevel
+// shading and recessed windows, exactly like a photo of the prop.
+//
+// Rendering is on demand: nothing is drawn unless a digit, the colon, or
+// the viewport changes. A steady clock costs two frames a second.
+//
+// LED glow (selective bloom):
+//   Lit segments are drawn at their true app colour (`litCore`, pale) in
+//   the main pass, so the digits stay crisp. Each lit element also has a
+//   "glow twin" on GLOW_LAYER in the row's saturated `bloom` colour. The
+//   twins alone are rendered to a small target, blurred by
+//   UnrealBloomPass, and added over the main image, which reproduces the
+//   app's stacked `.shadow(color: bloom)` halos without touching the
+//   digits themselves.
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 import { rowLayout, enclosureLayout, EnclosureMetrics } from '../models/layout.js';
@@ -33,42 +45,57 @@ import { brushedMetalTexture, windowGelTexture, plateTexture } from './textures.
 
 // ---- Tunables -------------------------------------------------------------
 
+/** Layer holding only the glow twins. */
+const GLOW_LAYER = 1;
 /**
- * Target linear luminance for lit segments and lamps. Each colour is
- * scaled to hit it, so red (a dim colour, luminance-wise) glows as
- * strongly as green and amber. Everything that isn't an LED stays well
- * under the bloom threshold, which gives selective bloom from a single
- * HDR render with no extra passes.
+ * Glow tuning. `gain` scales the twins' `bloom` colour; `strength` and
+ * the per-mip weights shape the halo. UnrealBloomPass blends five blur
+ * mips (½ … 1/32 resolution); the stock weights give a wide haze, so
+ * these favour the small mips, like the app's 2 / 5 / 11pt shadows.
  */
-//
-// Segments use the saturated `lit` colour pushed well past 1.0: the
-// Neutral tone mapper desaturates the hot core towards white (the app's
-// pale `litCore`), while the bloom keeps the full row colour (the app's
-// `bloom` shadows). One colour, both looks.
-const LED_LUMINANCE = 2.0;
-const LAMP_LUMINANCE = 2.0;
-// UnrealBloomPass blends five blur mips (½ … 1/32 resolution). Its stock
-// weights give a wide haze; these keep the glow tight around each
-// segment, like the app's stacked 2 / 5 / 11pt shadows.
-const BLOOM = { strength: 0.7, radius: 0, threshold: 0.8, mipWeights: [0.7, 0.4, 0.12, 0.02, 0.0] };
+const GLOW = { gain: 0.5, strength: 0.85, radius: 0, mipWeights: [1.0, 0.6, 0.25, 0.06, 0.0] };
 
 const ENCLOSURE_DEPTH = 8;
 const PANEL_Z = 1.6;          // row panel front face
 const BEZEL_DEPTH = 1.1;      // how far the window bezels stand proud
 const BEZEL_BORDER = 1.0;
 const PLATE_Z = 0.35;         // caption plates sit just proud of the panel
-const MAX_TILT = 0.11;        // radians (~6°)
-const TILT_EASE = 0.12;       // per-frame approach factor
 const CAMERA_FOV = 22;
 const FIT_MARGIN = 1.08;
 
 const srgb = ([r, g, b]) => new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace);
 
-/** sRGB triple → linear colour scaled to the given luminance (HDR). */
-function hdr(rgb, luminance) {
-  const c = srgb(rgb);
-  const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-  return c.multiplyScalar(luminance / l);
+/** Adds the blurred glow texture over the main render. */
+const GlowMixShader = {
+  uniforms: { baseTexture: { value: null }, glowTexture: { value: null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D baseTexture;
+    uniform sampler2D glowTexture;
+    varying vec2 vUv;
+    void main() {
+      gl_FragColor = texture2D(baseTexture, vUv) + vec4(texture2D(glowTexture, vUv).rgb, 0.0);
+    }`,
+};
+
+/** Small radial white → transparent sprite: the LED lamps' hot spot. */
+function hotSpotTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,0.85)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 // ---- Geometry helpers -----------------------------------------------------
@@ -186,21 +213,27 @@ export class TimeCircuitsScene {
 
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 1, 5000);
 
-    // The rig is what tilts; the camera stays put.
-    this.rig = new THREE.Group();
-    this.scene.add(this.rig);
+    this.model = new THREE.Group();
+    this.scene.add(this.model);
 
-    // HDR (half-float) + 4× MSAA target, so LED colours can exceed 1.0
-    // and the bloom threshold separates LEDs from bright chrome.
+    // Glow: twins → glowSource → UnrealBloomPass (threshold 0, since only
+    // twins are in the target). The pass leaves the pure blurred halo in
+    // renderTargetsHorizontal[0], which the mix pass samples. Driven by
+    // hand rather than through a second EffectComposer.
+    this.glowSource = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), GLOW.strength, GLOW.radius, 0);
+    this.bloom.compositeMaterial.uniforms.bloomFactors.value = GLOW.mipWeights;
+
+    // Main image: 4× MSAA, half-float so glow + core can exceed 1.0
+    // before the Neutral tone mapper rolls it off.
     const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
     this.composer = new EffectComposer(this.renderer, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
-    this.bloom.compositeMaterial.uniforms.bloomFactors.value = BLOOM.mipWeights;
-    this.composer.addPass(this.bloom);
+    const mix = new ShaderPass(new THREE.ShaderMaterial(GlowMixShader), 'baseTexture');
+    mix.material.uniforms.glowTexture.value = this.bloom.renderTargetsHorizontal[0].texture;
+    this.composer.addPass(mix);
     this.composer.addPass(new OutputPass());
 
-    this.tilt = { x: 0, y: 0, tx: 0, ty: 0 };
     this.rows = [];
     this.colonLit = true;
     this.disposables = [];
@@ -239,15 +272,8 @@ export class TimeCircuitsScene {
     if (lit === this.colonLit) return;
     this.colonLit = lit;
     for (const row of this.rows) {
-      for (const dot of row.colonDots) dot.material = lit ? row.mats.lamp : row.mats.lampOff;
+      for (const dot of row.colonDots) dot.setLit(lit);
     }
-    this.requestRender();
-  }
-
-  /** Target tilt in −1…1 on each axis; the rig eases towards it. */
-  setTiltTarget(nx, ny) {
-    this.tilt.tx = THREE.MathUtils.clamp(nx, -1, 1) * MAX_TILT;
-    this.tilt.ty = THREE.MathUtils.clamp(ny, -1, 1) * MAX_TILT;
     this.requestRender();
   }
 
@@ -255,9 +281,12 @@ export class TimeCircuitsScene {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     if (w === 0 || h === 0) return;
+    const pr = this.renderer.getPixelRatio();
     this.renderer.setSize(w, h, false);
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer.setPixelRatio(pr);
     this.composer.setSize(w, h);
+    this.glowSource.setSize(Math.round(w * pr), Math.round(h * pr));
+    this.bloom.setSize(Math.round(w * pr), Math.round(h * pr));
     this.camera.aspect = w / h;
     this.#fitCamera();
     this.requestRender();
@@ -266,29 +295,22 @@ export class TimeCircuitsScene {
   requestRender() {
     if (this.renderQueued) return;
     this.renderQueued = true;
-    requestAnimationFrame(() => this.#frame());
+    requestAnimationFrame(() => {
+      this.renderQueued = false;
+      this.renderNow();
+    });
   }
 
-  /** Synchronous render, for screenshots and tests. */
+  /** Synchronous render: glow layer first, then the main image. */
   renderNow() {
+    const { renderer, camera } = this;
+    camera.layers.set(GLOW_LAYER);
+    renderer.setRenderTarget(this.glowSource);
+    renderer.clear();
+    renderer.render(this.scene, camera);
+    this.bloom.render(renderer, null, this.glowSource, 0, false);
+    camera.layers.set(0);
     this.composer.render();
-  }
-
-  // ---- Frame --------------------------------------------------------------
-
-  #frame() {
-    this.renderQueued = false;
-    const t = this.tilt;
-    t.x += (t.tx - t.x) * TILT_EASE;
-    t.y += (t.ty - t.y) * TILT_EASE;
-    if (Math.abs(t.tx - t.x) < 1e-4) t.x = t.tx;
-    if (Math.abs(t.ty - t.y) < 1e-4) t.y = t.ty;
-    // Pointer right → turn the right edge away; pointer down → tip the
-    // bottom away. Feels like the panel is looking at the cursor.
-    this.rig.rotation.y = t.x;
-    this.rig.rotation.x = t.y;
-    this.composer.render();
-    if (t.x !== t.tx || t.y !== t.ty) this.requestRender();
   }
 
   // ---- Camera -------------------------------------------------------------
@@ -327,6 +349,7 @@ export class TimeCircuitsScene {
       envMapIntensity: 0.6,
     });
     this.rivetMat = new THREE.MeshStandardMaterial({ color: srgb([0.5, 0.5, 0.48]), metalness: 0.9, roughness: 0.35 });
+    this.hotSpotMat = new THREE.MeshBasicMaterial({ map: hotSpotTexture(), transparent: true, depthWrite: false });
     this.rowMats = new Map();
   }
 
@@ -336,9 +359,10 @@ export class TimeCircuitsScene {
     if (!m) {
       m = {
         ghost: new THREE.MeshBasicMaterial({ color: srgb(color.ghost) }),
-        lit: new THREE.MeshBasicMaterial({ color: hdr(color.lit, LED_LUMINANCE) }),
-        lamp: new THREE.MeshBasicMaterial({ color: hdr(color.lit, LAMP_LUMINANCE) }),
+        lit: new THREE.MeshBasicMaterial({ color: srgb(color.litCore) }),
+        lamp: new THREE.MeshBasicMaterial({ color: srgb(color.lit) }),
         lampOff: new THREE.MeshBasicMaterial({ color: srgb(color.ghost) }),
+        glow: new THREE.MeshBasicMaterial({ color: srgb(color.bloom).multiplyScalar(GLOW.gain) }),
         gel: new THREE.MeshBasicMaterial({ map: windowGelTexture(color.windowTint) }),
       };
       this.rowMats.set(color.name, m);
@@ -359,7 +383,7 @@ export class TimeCircuitsScene {
   }
 
   #clearModel() {
-    for (const child of [...this.rig.children]) this.rig.remove(child);
+    for (const child of [...this.model.children]) this.model.remove(child);
     for (const d of this.disposables) d.dispose();
     this.disposables = [];
   }
@@ -375,7 +399,7 @@ export class TimeCircuitsScene {
     }));
     const mat = this.#track(new THREE.MeshStandardMaterial({ map: tex, metalness: 0.3, roughness: 0.55 }));
     const geo = this.#track(slabGeometry(0, 0, width, height, e.cornerRadius, ENCLOSURE_DEPTH, 1.2));
-    this.rig.add(new THREE.Mesh(geo, mat));
+    this.model.add(new THREE.Mesh(geo, mat));
 
     // Corner rivets: shallow metal domes.
     const rivetGeo = this.#track(new THREE.SphereGeometry(e.rivetRadius, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2));
@@ -385,7 +409,7 @@ export class TimeCircuitsScene {
       rivet.rotation.x = Math.PI / 2;
       rivet.scale.set(1, 0.6, 1);
       rivet.position.set(...this.#world(x, y), 0);
-      this.rig.add(rivet);
+      this.model.add(rivet);
     }
   }
 
@@ -418,7 +442,7 @@ export class TimeCircuitsScene {
   #buildRow(index, label, { panel, content }) {
     const color = rowColorForIndex(index);
     const mats = this.#materialsFor(color);
-    this.rig.add(this.#panelMesh(panel, 88 + index * 1955));
+    this.model.add(this.#panelMesh(panel, 88 + index * 1955));
 
     const ox = content.x;
     const oy = content.y;
@@ -434,7 +458,7 @@ export class TimeCircuitsScene {
       const gelGeo = this.#track(new THREE.PlaneGeometry(win.w, win.h));
       const gel = new THREE.Mesh(gelGeo, mats.gel);
       gel.position.set(wcx, wcy, zFace + 0.05);
-      this.rig.add(gel);
+      this.model.add(gel);
 
       // Bezel: a rounded frame with the window cut out.
       const outer = roundedRectShape(wcx, wcy, win.w + BEZEL_BORDER * 2, win.h + BEZEL_BORDER * 2, 2.6);
@@ -444,15 +468,15 @@ export class TimeCircuitsScene {
       }));
       const bezel = new THREE.Mesh(bezelGeo, this.bezelMat);
       bezel.position.z = zFace;
-      this.rig.add(bezel);
+      this.model.add(bezel);
 
       // Glass sheet: reflection only (additive), so it never dims the LEDs.
       const glass = new THREE.Mesh(gelGeo, this.glassMat);
       glass.position.set(wcx, wcy, zFace + BEZEL_DEPTH);
-      this.rig.add(glass);
+      this.model.add(glass);
 
       // Caption plate.
-      this.rig.add(this.#plate(field.caption, ox + field.captionCenter.x, oy + field.captionCenter.y, zFace + PLATE_Z, {
+      this.model.add(this.#plate(field.caption, ox + field.captionCenter.x, oy + field.captionCenter.y, zFace + PLATE_Z, {
         fontSize: 7.2, padX: 4, padY: 1, height: 11, radius: 1.5,
         fill: Palette.captionPlateRed, textColor: Palette.chromeTextGrey, tracking: 0.02,
       }));
@@ -464,28 +488,40 @@ export class TimeCircuitsScene {
         for (const p of polys) ghostShapes.push(polygonShape(p, cx, cy));
         const lit = new THREE.Mesh(glyphGeometry(ch.kind, 0), mats.lit);
         lit.position.set(cx, cy, zFace + 0.15);
-        this.rig.add(lit);
-        row.chars.push({ mesh: lit, kind: ch.kind, field: field.id, mask: 0 });
+        const glow = this.#glowTwin(lit, mats.glow);
+        this.model.add(lit, glow);
+        row.chars.push({ meshes: [lit, glow], kind: ch.kind, field: field.id, mask: 0 });
       }
     }
     const ghostGeo = this.#track(new THREE.ShapeGeometry(ghostShapes, 1));
     const ghost = new THREE.Mesh(ghostGeo, mats.ghost);
     ghost.position.z = zFace + 0.1;
-    this.rig.add(ghost);
+    this.model.add(ghost);
 
     // Round LED lamps (AM/PM indicators and colon dots).
     const lampGeo = this.#track(new THREE.SphereGeometry(ROW.amPm.lampRadius, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2));
+    const hotGeo = this.#track(new THREE.CircleGeometry(ROW.amPm.lampRadius * 0.5, 16));
     const lamp = (x, y) => {
-      const m = new THREE.Mesh(lampGeo, mats.lampOff);
-      m.rotation.x = Math.PI / 2;
-      m.scale.set(1, 0.5, 1);
-      m.position.set(...this.#world(ox + x, oy + y), zFace + 0.1);
-      this.rig.add(m);
-      return m;
+      const [wx, wy] = this.#world(ox + x, oy + y);
+      const dome = new THREE.Mesh(lampGeo, mats.lampOff);
+      dome.rotation.x = Math.PI / 2;
+      dome.scale.set(1, 0.5, 1);
+      dome.position.set(wx, wy, zFace + 0.1);
+      const glow = this.#glowTwin(dome, mats.glow);
+      const hot = new THREE.Mesh(hotGeo, this.hotSpotMat);
+      hot.position.set(wx, wy, zFace + 0.1 + ROW.amPm.lampRadius * 0.5 + 0.05);
+      this.model.add(dome, glow, hot);
+      const setLit = (lit) => {
+        dome.material = lit ? mats.lamp : mats.lampOff;
+        glow.visible = lit;
+        hot.visible = lit;
+      };
+      setLit(false);
+      return { setLit };
     };
     for (const [key, text] of [['am', 'AM'], ['pm', 'PM']]) {
       const spec = ROW.amPm[key];
-      this.rig.add(this.#plate(text, ox + spec.label.x, oy + spec.label.y, zFace + PLATE_Z, {
+      this.model.add(this.#plate(text, ox + spec.label.x, oy + spec.label.y, zFace + PLATE_Z, {
         fontSize: 5.2, padX: 2, padY: 0.3, height: ROW.amPm.labelH, radius: 1,
         fill: Palette.captionPlateRed, textColor: Palette.chromeTextGrey,
       }));
@@ -493,12 +529,12 @@ export class TimeCircuitsScene {
     }
     for (const d of ROW.colon.dots) {
       const dot = lamp(d.x, d.y);
-      dot.material = this.colonLit ? mats.lamp : mats.lampOff;
+      dot.setLit(this.colonLit);
       row.colonDots.push(dot);
     }
 
     // City name plate.
-    this.rig.add(this.#plate(label, ox + ROW.cityPlate.cx, oy + ROW.cityPlate.y + ROW.cityPlate.h / 2, zFace + PLATE_Z, {
+    this.model.add(this.#plate(label, ox + ROW.cityPlate.cx, oy + ROW.cityPlate.y + ROW.cityPlate.h / 2, zFace + PLATE_Z, {
       fontSize: 9.5, padX: 10, padY: 2, height: ROW.cityPlate.h, radius: 2,
       fill: Palette.cityPlateBlack, textColor: Palette.chromeTextGrey, tracking: 0.03,
       border: 'rgba(0,0,0,0.9)', weight: 800,
@@ -507,13 +543,23 @@ export class TimeCircuitsScene {
     return row;
   }
 
+  /** Same geometry and transform, glow material, glow layer only. */
+  #glowTwin(mesh, material) {
+    const twin = new THREE.Mesh(mesh.geometry, material);
+    twin.position.copy(mesh.position);
+    twin.rotation.copy(mesh.rotation);
+    twin.scale.copy(mesh.scale);
+    twin.layers.set(GLOW_LAYER);
+    return twin;
+  }
+
   #buildEmptyState() {
     const r = this.enclosure.empty;
-    this.rig.add(this.#panelMesh(r, 7));
+    this.model.add(this.#panelMesh(r, 7));
     const cx = r.x + r.w / 2;
     const plateOpts = { padX: 6, padY: 2, radius: 2, fill: Palette.cityPlateBlack, textColor: Palette.chromeTextGrey, tracking: 0.08 };
-    this.rig.add(this.#plate('NO CITIES SELECTED', cx, r.y + r.h / 2 - 8, PANEL_Z + PLATE_Z, { ...plateOpts, fontSize: 10 }));
-    this.rig.add(this.#plate('USE CITIES TO ADD UP TO 3', cx, r.y + r.h / 2 + 10, PANEL_Z + PLATE_Z,
+    this.model.add(this.#plate('NO CITIES SELECTED', cx, r.y + r.h / 2 - 8, PANEL_Z + PLATE_Z, { ...plateOpts, fontSize: 10 }));
+    this.model.add(this.#plate('USE CITIES TO ADD UP TO 3', cx, r.y + r.h / 2 + 10, PANEL_Z + PLATE_Z,
       { ...plateOpts, fontSize: 6.5, textColor: [0.7, 0.7, 0.68] }));
   }
 
@@ -535,10 +581,11 @@ export class TimeCircuitsScene {
       const mask = ch.kind === 14 ? fourteenSegmentMask(c) : sevenSegmentMask(c);
       if (mask !== ch.mask) {
         ch.mask = mask;
-        ch.mesh.geometry = glyphGeometry(ch.kind, mask);
+        const geo = glyphGeometry(ch.kind, mask);
+        for (const m of ch.meshes) m.geometry = geo;
       }
     }
-    row.am.material = readout.isAM ? row.mats.lamp : row.mats.lampOff;
-    row.pm.material = readout.isAM ? row.mats.lampOff : row.mats.lamp;
+    row.am.setLit(readout.isAM);
+    row.pm.setLit(!readout.isAM);
   }
 }

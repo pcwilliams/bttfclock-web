@@ -5,8 +5,8 @@ It shows the time in three configurable world cities on a recreation of the
 Back to the Future DeLorean **Time Circuits**, rendered as a subtle 3D scene
 with three.js. Each row has red, green or amber LED segments, grey-on-red
 caption plates, AM/PM lamps and a colon that ticks in step with wall-clock
-seconds. The panel tilts gently towards the mouse, or follows the phone's
-gyro.
+seconds. The view is fixed and straight-on. The depth shows only as bevel
+shading and recessed windows, like a photo of the prop.
 
 The visual design, segment maths, colours, catalog and behaviour are ported
 1:1 from the Swift app. When the two disagree, the Swift app is the
@@ -23,8 +23,8 @@ reference.
 
 - **No build step.** Plain ES modules plus an import map in `index.html`.
 - **three.js r186** (`0.186.1`) from `cdn.jsdelivr.net`. Uses the core
-  plus these addons: `EffectComposer`, `RenderPass`, `UnrealBloomPass`,
-  `OutputPass` and `RoomEnvironment`.
+  plus these addons: `EffectComposer`, `RenderPass`, `ShaderPass`,
+  `UnrealBloomPass`, `OutputPass` and `RoomEnvironment`.
 - **Lexend Exa** (Google Fonts) stands in for SF Pro Expanded Heavy on
   the plates and in the UI.
 - **Persistence:** `localStorage`, key `bttfclock.selectedCityIds.v1`.
@@ -62,7 +62,6 @@ same way the app's launch args do.
 | `frozendate`  | `?frozendate=1985-10-26T01:21:00-07:00` | Pins the clock at that instant. The colon keeps ticking. An offset or `Z` is **required**. |
 | `cities`      | `?cities=london,tokyo,sydney`        | Replaces the selection (and persists it, like the app). Unknown ids are dropped. |
 | `settings`    | `?settings`                          | Opens the CITIES panel on load. |
-| `notilt`      | `?notilt`                            | Disables the parallax tilt. |
 
 **Gotcha:** `URLSearchParams` decodes `+` as a space, so an unencoded
 `+01:00` arrives as ` 01:00`. `parseFrozenDate` puts the `+` back.
@@ -93,11 +92,10 @@ bttfclock-web/
 │   │   ├── clock.js           # ClockModel (frozen/live) + isColonLit step fn
 │   │   └── launchArgs.js      # URL parameter parsing
 │   ├── scene/
-│   │   ├── timeCircuitsScene.js  # three.js model, bloom, camera fit, tilt, on-demand render
+│   │   ├── timeCircuitsScene.js  # three.js model, LED glow, camera fit, on-demand render
 │   │   └── textures.js           # canvas textures: brushed metal, gel, label plates
 │   └── ui/
-│       ├── settingsPanel.js   # <dialog>: reorder / remove / add / search / reset
-│       └── tilt.js            # pointer + DeviceOrientation → scene tilt target
+│       └── settingsPanel.js   # <dialog>: reorder / remove / add / search / reset
 ├── tests/                     # node:test, *.test.js (auto-discovered)
 ├── docs/                      # screenshots used by README / HTML docs / og:image
 ├── .github/workflows/pages.yml   # test, then deploy to Pages on main
@@ -115,8 +113,8 @@ The web version keeps the app's MVVM-ish split:
 - **Services** hold state: `CityStore` is the app's `CityStore`, and
   `ClockModel` is the app's `ClockViewModel`.
 - **Scene** is the "view". `TimeCircuitsScene` exposes `setCities`,
-  `setReadouts`, `setColonLit`, `setTiltTarget`, `resize` and `renderNow`.
-- **UI** is the DOM chrome (settings dialog, tilt input).
+  `setReadouts`, `setColonLit`, `resize` and `renderNow`.
+- **UI** is the DOM chrome (the settings dialog).
 
 `main.js` wires them together, and the scene is dynamically `import()`ed
 after the font loads.
@@ -131,8 +129,7 @@ after the font loads.
 - `visibilitychange` forces a refresh when the tab returns, because
   background tabs throttle timers.
 - The scene **renders on demand**. `requestRender()` coalesces into one
-  rAF, and the rAF only re-queues itself while the tilt is still easing.
-  A steady clock draws 2 frames per second.
+  rAF. A steady clock draws 2 frames per second.
 - The colon is phase-locked to wall-clock seconds even when the date is
   frozen. This matches the app's `TimelineView` behaviour.
 
@@ -149,50 +146,50 @@ in `#world()`.
 | Row panel | Extruded rounded rect r=5, front at `PANEL_Z` | Same, with the lighter gradient |
 | Display gel | Plane per field | `MeshBasicMaterial` + 4×64 gradient (black → windowTint → black, 35% darker) |
 | Ghost segments | **One merged `ShapeGeometry` per row** | Basic, `ghost` colour |
-| Lit segments | One mesh per character; geometry swapped from a `(kind, mask)` **glyph cache** | Basic, HDR `lit` colour |
+| Lit segments | One mesh per character; geometry swapped from a `(kind, mask)` **glyph cache** | Basic, `litCore` (the app's pale core) |
+| Glow twins | Same geometry/transform as each lit segment and lamp, on `GLOW_LAYER` only | Basic, row `bloom` colour × `GLOW.gain` |
 | Bezel | Extruded rounded frame with the window as a hole | Black standard |
 | Glass | Plane over each window | Black standard, **additive** blending: reflection only, never dims LEDs |
 | Plates | Plane + canvas texture (text measured to size, like `.fixedSize()`) | Basic, transparent |
-| Lamps, colon, rivets | Flattened hemispheres | Basic HDR (lamps) / metal standard (rivets) |
+| Lamps, colon, rivets | Flattened hemispheres (+ a radial white hot-spot disc when lit) | Basic `lit` / `ghost` (lamps), metal standard (rivets) |
 
 The glyph cache means a character change costs a pointer swap and no
 allocation. Over a whole day only a few dozen glyph geometries exist.
 
-### Selective bloom from one HDR pass
+### LED glow: a separate glow layer
 
-- The `EffectComposer` renders into a **HalfFloat + 4×MSAA** target, so
-  colours above 1.0 survive.
-- LED materials take the saturated `lit` colour and **normalise it to a
-  target luminance** (`LED_LUMINANCE = 2.0`). This makes red glow as
-  strongly as green and amber, even though red is dim luminance-wise.
-- Everything else (chrome text, panels, specular) stays under the bloom
-  `threshold` (0.8), so only LEDs bloom. No layers and no second render.
-- `NeutralToneMapping` (applied in the `OutputPass`) desaturates the hot
-  core towards white, which gives the app's pale `litCore`. The bloom
-  keeps the full row colour, which gives the app's `bloom` shadows. One
-  colour produces both looks.
-- `UnrealBloomPass` mip weights are overridden to
-  `[0.7, 0.4, 0.12, 0.02, 0]`. The stock `[1, .8, .6, .4, .2]` washes
-  the whole panel in haze.
+The first version pushed the LED colour far above 1.0 so that a
+luminance threshold would pick out only the LEDs. Pushing that hard
+bleached and blurred the digits ("too blown out, too fuzzy"). The current
+design keeps the digits at their true colour and draws the glow
+separately:
 
-### Tilt
-
-The `rig` group rotates and the camera stays put. Max ±0.11 rad (≈6°),
-eased at 0.12 per frame.
-
-- **Mouse/pen:** the target follows the pointer relative to the window
-  centre, and recentres on leave or blur.
-- **Touch devices:** `deviceorientation` measured against a slowly
-  drifting baseline, so any holding angle reads as level. It handles
-  landscape by swapping beta and gamma. iOS needs
-  `DeviceOrientationEvent.requestPermission()`, which runs on the first
-  tap on the canvas.
-- Tilt is disabled by `prefers-reduced-motion` and by `?notilt`.
+- **Main pass (layer 0):** lit segments use the app's `litCore`, lamps
+  use `lit`, and the hot spot is a radial white disc. Nothing goes above
+  1.0, so the digits stay crisp and match the app's colours.
+- **Glow twins (`GLOW_LAYER = 1`):** every lit segment and lit lamp has
+  a twin mesh with the same geometry, in the row's saturated `bloom`
+  colour × `GLOW.gain` (0.5). The twins share the glyph geometry, so a
+  digit change swaps both. Lamp twins are hidden when the lamp is off.
+- **`renderNow()`** sets the camera to `GLOW_LAYER` and renders the
+  twins into `glowSource` (half-float). It then runs `UnrealBloomPass`
+  on that target by hand (threshold 0, no second composer). The pass
+  leaves the pure blurred halo in `bloom.renderTargetsHorizontal[0]`.
+  The camera goes back to layer 0, and the main `EffectComposer` runs
+  `RenderPass` (4× MSAA, half-float), then `GlowMixShader` (adds the
+  halo), then `OutputPass` (Neutral tone mapping + sRGB).
+- Mip weights are `[1.0, 0.6, 0.25, 0.06, 0]` and strength is 0.85. The
+  stock weights `[1, .8, .6, .4, .2]` give a wide haze; these favour the
+  small mips, like the app's stacked 2 / 5 / 11pt shadows.
+- To tune it, use `GLOW` at the top of `timeCircuitsScene.js`: `gain`
+  (twin brightness), `strength` (overall halo) and `mipWeights` (how far
+  the halo spreads).
 
 ### Camera fit
 
-The `PerspectiveCamera` uses a 22° FOV, so it's nearly orthographic but
-the tilt still shows depth. The distance fits the enclosure's width and
+The `PerspectiveCamera` uses a 22° FOV and a fixed, straight-on
+position. It's nearly orthographic, but there's still a hint of
+perspective on the window bezels. The distance fits the enclosure's width and
 height with an 8% margin. `onLayout` reports the clock's pixel height to
 CSS (`--clock-height`). The CITIES button then sits under the clock when
 there's room (phones in portrait). Otherwise it moves to the bottom-right
@@ -242,7 +239,7 @@ python3 -m http.server 8123 &
 
 `window.timeCircuits = { scene, store, clock }` is exposed for poking
 at from devtools or Playwright, for example
-`timeCircuits.scene.bloom.strength = 0`.
+`timeCircuits.scene.bloom.strength = 0` to switch off the glow.
 Headless SwiftShader throttles rAF to about 2 fps, so don't use it to
 judge frame rates.
 
@@ -258,17 +255,20 @@ can't turn Pages on by itself.
 
 ## Design decisions
 
-- **Subtle 3D, not a free-orbit model.** Seen head-on it reads like the
-  app. The depth (raised panels, recessed windows, glass, domed lamps
-  and rivets) only shows as you move.
+- **Static, straight-on 3D.** The earlier pointer/gyro tilt was removed
+  at the owner's request, because straight-on is the look they want.
+  The 3D geometry (raised panels, recessed bezels, domed lamps and
+  rivets) still gives real bevel shading.
 - **Segments are geometry, not a font or a texture.** They're the same
   hexagon polygons as `SegmentShapes.swift`, so they stay crisp at any
   size and the ghost/lit layering is exact.
 - **Plates are canvas textures.** Text is measured first and the plate
   is sized to fit, which reproduces SwiftUI's
   `.fixedSize().padding()` behaviour.
-- **One HDR render + luminance threshold for selective bloom**, rather
-  than layer-masked double rendering. That's half the draw work.
+- **A glow layer, not an HDR threshold.** Brightness-thresholded bloom
+  forced the LEDs to be over-bright to separate them from the chrome
+  text, which blew out the digits. Rendering the twins separately costs
+  one extra tiny draw (only the LED meshes) and keeps the cores exact.
 - **On-demand rendering** rather than a rAF loop, for battery life on
   phones, given the display changes twice a second.
 - **Colon centred on the digits.** The app's colon sits about 3pt low
@@ -291,6 +291,13 @@ can't turn Pages on by itself.
   texture. Otherwise the plates are measured in the fallback font.
 - **`UnrealBloomPass` default mip weights** produce a full-screen haze
   (see above).
+- **`UnrealBloomPass` blends its result over its input** (`readBuffer`).
+  If you sample that buffer, you get the twins *plus* the halo, which
+  doubles the cores. Sample `renderTargetsHorizontal[0]` for the halo
+  only.
+- **Glow twins live only on `GLOW_LAYER`** (`layers.set`, not
+  `layers.enable`). If they were also on layer 0, they would z-fight the
+  real segments.
 - **Ghost and lit segments share a plane.** They're separated by 0.05
   units in z, with near/far set relative to the camera distance to avoid
   z-fighting.
