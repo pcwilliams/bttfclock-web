@@ -12,6 +12,7 @@ import { ClockModel, isColonLit } from './services/clock.js';
 import { parseLaunchArgs } from './services/launchArgs.js';
 import { cityWithId } from './models/cityCatalog.js';
 import { SettingsPanel } from './ui/settingsPanel.js';
+import { Installer, registerServiceWorker } from './ui/installer.js';
 import { LABEL_FONT_FAMILY } from './scene/textures.js';
 
 async function fontsReady() {
@@ -61,6 +62,14 @@ async function main() {
 
   const openButton = document.getElementById('open-settings');
   openButton.addEventListener('click', () => panel.open());
+
+  // Install as app: header button when the browser offers a one-click
+  // install, plus a section in the CITIES panel for every browser.
+  const installer = new Installer();
+  const installButton = document.getElementById('install-app');
+  installButton.addEventListener('click', () => installer.prompt());
+  installer.subscribe((mode) => { installButton.hidden = mode !== 'prompt'; });
+  panel.attachInstaller(installer);
   window.addEventListener('keydown', (e) => {
     if (panel.isOpen || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === ',' || e.key === 'c' || e.key === 'C') {
@@ -122,6 +131,7 @@ async function main() {
 
   document.body.classList.add('ready');
   if (args.openSettings) panel.open();
+  registerServiceWorker();
 }
 
 main().catch((err) => {

@@ -11,6 +11,12 @@
   <meta property="og:description" content="A Back to the Future Time Circuits world clock, rendered in 3D with three.js.">
   <meta property="og:image" content="docs/bttfclock-web.png">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Time Circuits">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend+Exa:wght@500;600;800&display=swap">
@@ -33,10 +39,16 @@
     This clock needs WebGL 2, which isn't available in this browser.
   </p>
 
-  <button id="open-settings" class="cities-btn" type="button" aria-haspopup="dialog" aria-controls="settings" title="Cities (,)">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9c-.6.3-1.2.6-1.7 1l-2.5-1-2 3.5L6.5 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.9c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" transform="translate(-1 0)"/></svg>
-    <span>CITIES</span>
-  </button>
+  <div class="chrome-bar">
+    <button id="open-settings" class="chrome-btn" type="button" aria-haspopup="dialog" aria-controls="settings" title="Cities (,)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9c-.6.3-1.2.6-1.7 1l-2.5-1-2 3.5L6.5 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.9c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" transform="translate(-1 0)"/></svg>
+      <span>CITIES</span>
+    </button>
+    <button id="install-app" class="chrome-btn" type="button" hidden title="Install Time Circuits as an app">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 3h2v9.2l3.3-3.3 1.4 1.4L12 16l-5.7-5.7 1.4-1.4 3.3 3.3V3ZM5 18h14v2H5v-2Z"/></svg>
+      <span>INSTALL</span>
+    </button>
+  </div>
 
   <dialog id="settings" aria-labelledby="settings-title">
     <div class="panel">
@@ -45,6 +57,7 @@
         <button class="done-btn" type="button" data-close>Done</button>
       </header>
 
+      <div class="panel-body">
       <section aria-labelledby="active-title">
         <div class="section-head">
           <h3 id="active-title">Active rows</h3>
@@ -64,8 +77,16 @@
       </section>
 
       <footer>
-        <button class="reset-btn" type="button" data-reset>Reset to New York · London · Hong Kong</button>
+        <div class="install" data-install hidden>
+          <div class="section-head">
+            <h3>Install as app</h3>
+          </div>
+          <p class="hint" data-install-hint></p>
+          <button class="install-btn" type="button" data-install-btn hidden>Install Time Circuits</button>
+        </div>
+        <button class="reset-btn" type="button" data-reset title="New York · London · Hong Kong">Reset to default cities</button>
       </footer>
+      </div>
     </div>
   </dialog>
 </body>

@@ -139,10 +139,26 @@ lit: new THREE.MeshBasicMaterial({ color: hdr(color.lit, LED_LUMINANCE) })</pre>
   </ul>
   <p>This mirrors how the SwiftUI app does it: a pale fill with coloured <code>.shadow</code> layers underneath. A side-by-side crop against the app's own screenshot now matches closely.</p>
 
+  <h2>Step 8: install as an app</h2>
+  <div class="prompt">
+    <span class="who">Prompt</span>
+    Yes, an “install as app” option sounds great!
+  </div>
+  <p>There are three pieces:</p>
+  <ul>
+    <li><strong>Manifest and icons.</strong> <code>manifest.webmanifest</code> asks for full-screen display, which falls back to a standalone window. <code>generate_icons.py</code> draws the icons with Pillow, using the same 7-segment polygons as the scene: three LED rows reading 01:21, 09:21 and 04:21, plus a maskable variant kept inside the 80% safe zone.</li>
+    <li><strong>The install UI.</strong> Only Chromium has an install API (<code>beforeinstallprompt</code>). On those browsers an INSTALL button appears next to CITIES. Everywhere else, the CITIES panel gives the right instructions: Share → Add to Home Screen on iPhone and iPad, File → Add to Dock in Mac Safari. The decision is a pure <code>installMode()</code> function with six unit tests.</li>
+    <li><strong>Offline.</strong> A desk clock shouldn't break when the Wi-Fi drops. <code>sw.js</code> is network-first for the app's own files, so a deploy is picked up on the next load with no version to bump. It's cache-first for the version-pinned three.js and the fonts.</li>
+  </ul>
+  <div class="reference">
+    <span class="who">Observation</span>
+    I'm seeing the offline reload come up in a fallback font. The page lists its resources from resource timing so the service worker can cache them on the first visit, but Chromium leaves font files out of that list.
+  </div>
+  <p>The fix was to have the service worker read the Google Fonts stylesheet when it caches it, and cache every font file it names. The Playwright check now goes fully offline and confirms <code>document.fonts.check('800 16px "Lexend Exa"')</code>. That check also caught a layout bug that was hidden while the sandbox fell back to a narrower font: on a phone, the panel's footer overlapped the city list. The panel now scrolls as one region, and the city list collapses to a one-line note when all three rows are full.</p>
+
   <h2>What's next</h2>
   <ul>
     <li>An optional "Destination time" mode, where the red row can be set to any date.</li>
-    <li>A PWA manifest so it can be installed as a full-screen desk clock.</li>
     <li>A Wake Lock toggle to keep a phone's screen on.</li>
   </ul>
 

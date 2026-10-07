@@ -39,15 +39,20 @@ html, body {
 }
 body.ready #clock { opacity: 1; }
 
-/* ---- CITIES button ------------------------------------------------------
-   Sits just below the clock when there's room (phones in portrait),
-   otherwise tucks into the bottom-right corner and fades when idle. */
-.cities-btn {
+/* ---- CITIES / INSTALL buttons --------------------------------------------
+   Sit just below the clock when there's room (phones in portrait),
+   otherwise tuck into the bottom-right corner and fade when idle. */
+.chrome-bar {
   position: fixed;
   left: 50%;
   top: min(calc(50% + var(--clock-height) / 2 + 28px),
            calc(100% - 64px - env(safe-area-inset-bottom)));
   transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  transition: opacity 400ms ease;
+}
+.chrome-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -59,21 +64,22 @@ body.ready #clock { opacity: 1; }
   font: 800 11px/1 var(--font);
   letter-spacing: 0.2em;
   cursor: pointer;
-  transition: opacity 400ms ease, background 150ms ease;
+  transition: background 150ms ease;
 }
-.cities-btn svg { width: 15px; height: 15px; }
-.cities-btn:hover { background: rgb(48, 48, 42); }
-.cities-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+.chrome-btn[hidden] { display: none; }
+.chrome-btn svg { width: 15px; height: 15px; }
+.chrome-btn:hover { background: rgb(48, 48, 42); }
+.chrome-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
 
-body.corner-btn .cities-btn {
+body.corner-btn .chrome-bar {
   left: auto;
   top: auto;
   right: calc(16px + env(safe-area-inset-right));
   bottom: calc(16px + env(safe-area-inset-bottom));
   transform: none;
-  background: rgba(36, 36, 31, 0.85);
 }
-body.corner-btn.idle .cities-btn:not(:focus-visible) { opacity: 0; }
+body.corner-btn .chrome-btn { background: rgba(36, 36, 31, 0.85); }
+body.corner-btn.idle .chrome-bar:not(:focus-within) { opacity: 0; }
 
 /* ---- No WebGL ------------------------------------------------------------ */
 .no-webgl-note { display: none; }
@@ -129,13 +135,16 @@ dialog[open] { display: flex; flex-direction: column; }
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
-.panel section { padding: 14px 18px 4px; }
-.panel section:last-of-type {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+/* Header stays put; everything below it scrolls as one region, so the
+   panel works on short phone screens. The city list has its own capped
+   scroll area so Install and Reset stay close. */
+.panel-body {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+.panel section { padding: 14px 18px 4px; }
 .section-head {
   display: flex;
   justify-content: space-between;
@@ -224,11 +233,11 @@ dialog[open] { display: flex; flex-direction: column; }
 }
 .catalog {
   margin-top: 8px;
+  max-height: min(260px, 40dvh);
   overflow-y: auto;
-  min-height: 120px;
-  flex: 1;
   overscroll-behavior: contain;
 }
+.catalog[hidden], .search[hidden] { display: none; }
 .catalog-btn {
   width: 100%;
   display: flex;
@@ -250,9 +259,26 @@ dialog[open] { display: flex; flex-direction: column; }
 .empty { color: var(--muted); font-size: 11px; padding: 12px; }
 
 .panel footer {
-  padding: 12px 18px 16px;
+  margin-top: 10px;
+  padding: 14px 18px 16px;
   border-top: 1px solid var(--line);
 }
+.install { margin-bottom: 12px; }
+.install[hidden] { display: none; }
+.install .hint { margin-top: 0; }
+.install-btn {
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--amber);
+  color: #1a1100;
+  font: 800 11px/1 var(--font);
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+.install-btn[hidden] { display: none; }
+.install-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .done-btn, .reset-btn {
   font: 800 11px/1 var(--font);
   letter-spacing: 0.12em;

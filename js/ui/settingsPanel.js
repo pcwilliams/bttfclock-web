@@ -63,6 +63,19 @@ export class SettingsPanel {
     this.render();
   }
 
+  /** Shows the "Install as app" section, driven by an Installer. */
+  attachInstaller(installer) {
+    const section = this.dialog.querySelector('[data-install]');
+    const hint = this.dialog.querySelector('[data-install-hint]');
+    const button = this.dialog.querySelector('[data-install-btn]');
+    button.addEventListener('click', () => installer.prompt());
+    installer.subscribe((mode) => {
+      section.hidden = mode === 'installed';
+      hint.textContent = installer.hint;
+      button.hidden = mode !== 'prompt';
+    });
+  }
+
   get isOpen() { return this.dialog.open; }
 
   open() {
@@ -125,7 +138,11 @@ export class SettingsPanel {
 
   #renderCatalog() {
     const full = this.store.selected.length >= MAX_CITIES;
+    // With all three rows in use there's nothing to add: show just the
+    // note instead of a long list of disabled cities.
     this.fullNote.hidden = !full;
+    this.search.hidden = full;
+    this.catalogList.hidden = full;
     const instant = this.now();
     const q = this.query;
     const matches = this.store.availableToAdd.filter((c) => !q

@@ -39,7 +39,7 @@ jobs:
       - name: Assemble static site
         run: |
           mkdir _site
-          cp -r index.html favicon.svg css js docs architecture.html tutorial.html _site/
+          cp -r index.html favicon.svg manifest.webmanifest sw.js icons css js docs architecture.html tutorial.html _site/
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

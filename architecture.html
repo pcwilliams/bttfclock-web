@@ -65,7 +65,8 @@ a { color: var(--accent-amber); }
       <span class="badge">three.js r186</span>
       <span class="badge">ES modules · no build</span>
       <span class="badge">WebGL 2 · glow layer</span>
-      <span class="badge">53 node:test tests</span>
+      <span class="badge">59 node:test tests</span>
+      <span class="badge">Installable PWA · offline</span>
     </div>
   </div>
 
@@ -90,6 +91,10 @@ graph TD
   MAIN --> STORE["services/cityStore.js<br/>3-city cap · localStorage"]
   MAIN --> CLOCK["services/clock.js<br/>ClockModel · isColonLit"]
   MAIN --> PANEL["ui/settingsPanel.js<br/>&lt;dialog&gt;"]
+  MAIN --> INST["ui/installer.js<br/>beforeinstallprompt · SW registration"]
+  INST --> IM["services/install.js<br/>installMode() (pure)"]
+  INST --> SW["sw.js<br/>offline cache"]
+  INST --> PANEL
   MAIN -->|dynamic import| SCENE["scene/timeCircuitsScene.js"]
   STORE --> CAT["models/cityCatalog.js<br/>40 cities"]
   CLOCK --> TR["models/timeReadout.js<br/>Intl.DateTimeFormat"]
@@ -191,6 +196,40 @@ graph TD
     <tr><td>amPmWidth · colonWidth</td><td>18 · 12</td><td>Indicator columns</td></tr>
     <tr><td>caption · window padding</td><td>11 tall · 4h/3v</td><td>DYMO plate · LED inset</td></tr>
   </table>
+
+  <h2>Install as app and offline</h2>
+  <p>The manifest, icons and a small service worker make the clock installable. <code>installMode()</code> decides what each browser is offered, and the service worker keeps the installed app working with no connection.</p>
+  <div class="diagram">
+<pre class="mermaid">
+graph TD
+  BIP["beforeinstallprompt<br/>(Chrome, Edge, Android)"] --> INS["Installer"]
+  AI["appinstalled / display-mode"] --> INS
+  UA["user agent + touch points"] --> MODE{"installMode()"}
+  INS --> MODE
+  MODE -->|prompt| BTN["INSTALL button + panel button<br/>→ event.prompt()"]
+  MODE -->|ios| IOS["Share → Add to Home Screen"]
+  MODE -->|mac-safari| MAC["File → Add to Dock"]
+  MODE -->|menu / unsupported| HINT["browser-menu hint"]
+  MODE -->|installed| NONE["hide install UI"]
+</pre>
+  </div>
+  <div class="diagram">
+<pre class="mermaid">
+graph TD
+  LOAD["first load (not yet controlled)"] --> REG["register sw.js after ready"]
+  REG --> WARM["postMessage warm:<br/>resource-timing URLs + page + manifest + icons"]
+  WARM --> CSS{"Google Fonts CSS?"}
+  CSS -->|yes| FONTS["parse url(...) → cache gstatic font files"]
+  WARM --> CACHE[("time-circuits-v1")]
+  FONTS --> CACHE
+  REQ["later requests"] --> SAME{"same origin?"}
+  SAME -->|yes| NF["network-first, 4 s timeout<br/>→ cache fallback (ignoreSearch)"]
+  SAME -->|jsDelivr / Google Fonts| CF["cache-first"]
+  NF --> CACHE
+  CF --> CACHE
+</pre>
+    <div class="caption">Network-first for our own files means a new deploy shows up on the next online load, with no cache version to bump.</div>
+  </div>
 
   <h2>Settings flow</h2>
   <div class="diagram">

@@ -1,6 +1,6 @@
 # Time Circuits (web)
 
-![three.js](https://img.shields.io/badge/three.js-r186-black) ![No build step](https://img.shields.io/badge/build-none-555) ![Tests](https://img.shields.io/badge/tests-53%20passing-2ea043)
+![three.js](https://img.shields.io/badge/three.js-r186-black) ![No build step](https://img.shields.io/badge/build-none-555) ![Tests](https://img.shields.io/badge/tests-59%20passing-2ea043)
 
 A Back to the Future **Time Circuits** world clock for the browser. It shows
 three cities on red, green and amber LED rows, rendered in 3D with three.js.
@@ -29,6 +29,8 @@ segment shapes, colours, city catalog and behaviour.
 - **CITIES panel:** pick from 40 cities, search, reorder and remove.
   The row colour follows position: red for destination, green for
   present, amber for last departed. Your choice is saved in the browser.
+- **Install as an app:** put it on your home screen, dock or app list.
+  It opens full-screen with no browser bars and keeps working offline.
 - Includes a **Hill Valley** easter egg.
 
 ![On a phone](docs/bttfclock-web-phone.png)
@@ -36,6 +38,13 @@ segment shapes, colours, city catalog and behaviour.
 ## Using it
 
 - Click **CITIES**, or press `,`, to manage cities. Press `Esc` to close.
+- To **install it as an app**:
+  - **Chrome / Edge (desktop and Android):** click **INSTALL** next to
+    CITIES, or use **Install app** in the browser menu.
+  - **iPhone / iPad:** tap **Share**, then **Add to Home Screen**.
+  - **Safari on a Mac:** choose **File → Add to Dock**.
+
+  The CITIES panel shows the right instructions for your browser.
 - Add parameters to the URL to set it up:
 
 | Parameter | Example | What it does |
@@ -85,6 +94,9 @@ Safari (desktop or iOS).
   separately, blurred, and laid on top, so the numbers stay sharp.
 - The page only redraws when something changes, so a running clock draws
   two frames a second instead of sixty.
+- A small service worker keeps a copy of the app, three.js and the font,
+  so the installed clock starts without a connection. While you're
+  online, it always fetches the latest version first.
 
 See [`architecture.html`](architecture.html) for diagrams and
 [`tutorial.html`](tutorial.html) for how it was built.
